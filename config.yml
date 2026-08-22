@@ -1,0 +1,57 @@
+# Configuration for the moderation-conversation generator.
+# Edit the paths, models and prompt wording below; nothing is hardcoded in the script.
+
+run:
+  seed: 42
+  temperature: 0.7
+  top_p: 0.95
+  max_new_tokens: 256
+  do_sample: true
+  # Set to a small number (e.g. 5) while testing, null to process the full CSV.
+  limit: null
+
+input:
+  csv_path: "data/example_posts.csv"
+  # Column holding a unique identifier for each post (any name is fine).
+  post_id_column: "post_id"
+  # Column holding the post text that gets dropped into the prompt templates.
+  post_text_column: "text"
+
+output:
+  dir: "outputs"
+
+# Every entry is loaded straight from Hugging Face Hub (or a local path) with
+# AutoModelForCausalLM / AutoTokenizer. Add or remove models freely.
+models:
+  - name: ministral
+    hf_repo_id: "mistralai/Ministral-8B-Instruct-2410"
+    dtype: bfloat16
+    device_map: auto
+    trust_remote_code: false
+
+  - name: llama3_8b
+    hf_repo_id: "meta-llama/Llama-3.1-8B-Instruct"
+    dtype: bfloat16
+    device_map: auto
+    trust_remote_code: false
+
+  - name: qwen2_5_7b
+    hf_repo_id: "Qwen/Qwen2.5-7B-Instruct"
+    dtype: bfloat16
+    device_map: auto
+    trust_remote_code: false
+
+# First turn of the conversation. {post_text} is substituted with the row's post.
+# Add more entries to try several phrasings for the opening question.
+first_questions:
+  - id: would_you_moderate
+    template: >-
+      I saw this post: "{post_text}"
+
+      Would you moderate it?
+
+# Follow-up turn, sent after the model's first reply. One output CSV is written
+# per (model, follow_up_question) combination, e.g. ministral_are_you_sure.csv.
+follow_up_questions:
+  - id: are_you_sure
+    template: "Are you sure?"

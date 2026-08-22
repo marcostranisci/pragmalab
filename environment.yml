@@ -1,0 +1,10 @@
+# Create with: conda env create -f environment.yml
+# PyTorch is intentionally left out here — install it separately with the
+# CUDA build that matches your HPC's drivers (see README.md), then run
+# `pip install -r requirements.txt` inside the env.
+name: modconv
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip

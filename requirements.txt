@@ -1,0 +1,8 @@
+transformers>=4.44,<5
+accelerate>=0.33
+huggingface_hub>=0.24
+pandas>=2.2
+PyYAML>=6.0
+tqdm>=4.66
+sentencepiece>=0.2.0
+protobuf>=4.25
