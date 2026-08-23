@@ -3,7 +3,10 @@
 For every post and every configured model, a first-turn question ("would you
 moderate this?") is sent to the model, followed by a configured follow-up
 question (e.g. "are you sure?"). One output CSV is written per
-(model, follow_up_question) combination.
+(model, follow_up_question) combination, with one row per (post, iteration).
+
+Set `run.n_iterations` and/or `run.seeds` in the config to repeat generation
+several times per (model, follow_up_question, post) with different seeds.
 
 Usage:
     python src/generate_conversations.py --config config.yml
@@ -12,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import gc
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +25,21 @@ import pandas as pd
 import torch
 import yaml
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+
+FIELDNAMES = [
+    "post_id",
+    "post_text",
+    "model",
+    "iteration",
+    "seed",
+    "temperature",
+    "first_question_id",
+    "first_question",
+    "first_response",
+    "follow_up_question_id",
+    "follow_up_question",
+    "follow_up_response",
+]
 
 DTYPE_MAP = {
     "bfloat16": torch.bfloat16,
@@ -56,6 +75,29 @@ def load_posts(cfg: dict) -> pd.DataFrame:
     if limit:
         df = df.head(int(limit))
     return df[[id_col, text_col]].rename(columns={id_col: "post_id", text_col: "post_text"})
+
+
+def resolve_seeds(run_cfg: dict) -> list[int]:
+    """Work out the list of seeds to iterate over for each (model, follow-up).
+
+    - `run.seeds: [1, 2, 3]` runs exactly those seeds (3 iterations).
+    - `run.n_iterations: 3` with `run.seed: 42` runs seeds [42, 43, 44].
+    - Neither set: a single iteration using `run.seed`.
+    - Both set: `n_iterations` must match `len(seeds)`.
+    """
+    seeds = run_cfg.get("seeds")
+    n_iterations = run_cfg.get("n_iterations")
+    if seeds is not None:
+        seeds = [int(s) for s in seeds]
+        if n_iterations is not None and int(n_iterations) != len(seeds):
+            raise ValueError(
+                f"run.n_iterations ({n_iterations}) does not match the number "
+                f"of run.seeds ({len(seeds)})"
+            )
+        return seeds
+    base_seed = int(run_cfg["seed"])
+    n_iterations = int(n_iterations) if n_iterations else 1
+    return [base_seed + i for i in range(n_iterations)]
 
 
 def generation_kwargs(cfg: dict) -> dict:
@@ -108,7 +150,7 @@ def output_filename(model_name: str, first_q_id: str, follow_up_id: str, n_first
 def run(cfg: dict) -> None:
     posts = load_posts(cfg)
     gen_kwargs = generation_kwargs(cfg)
-    seed = cfg["run"]["seed"]
+    seeds = resolve_seeds(cfg["run"])
     temperature = cfg["run"]["temperature"]
     first_questions = cfg["first_questions"]
     follow_up_questions = cfg["follow_up_questions"]
@@ -120,46 +162,64 @@ def run(cfg: dict) -> None:
         model_name = model_cfg["name"]
         print(f"[{model_name}] loading {model_cfg['hf_repo_id']} ...")
         tokenizer, model = load_model(model_cfg)
-        set_seed(seed)
 
+        # Open one CSV writer per (first_question, follow_up_question) up front so
+        # rows from every iteration/seed are streamed into the same output file.
+        files: dict[tuple[str, str], Any] = {}
+        writers: dict[tuple[str, str], csv.DictWriter] = {}
         for fq in first_questions:
-            print(f"[{model_name}] first question '{fq['id']}': generating first-turn replies "
-                  f"for {len(posts)} posts ...")
-            first_turns: list[Turn] = []
-            for row in posts.itertuples(index=False):
-                user_msg = fq["template"].format(post_text=row.post_text)
-                messages = [{"role": "user", "content": user_msg}]
-                first_response = generate_reply(model, tokenizer, messages, gen_kwargs)
-                first_turns.append(Turn(row.post_id, row.post_text, messages, first_response))
-
             for fu in follow_up_questions:
-                print(f"[{model_name}] follow-up '{fu['id']}': generating replies ...")
-                records = []
-                for turn in first_turns:
-                    conversation = turn.messages + [
-                        {"role": "assistant", "content": turn.first_response},
-                        {"role": "user", "content": fu["template"]},
-                    ]
-                    follow_up_response = generate_reply(model, tokenizer, conversation, gen_kwargs)
-                    records.append(
-                        {
-                            "post_id": turn.post_id,
-                            "post_text": turn.post_text,
-                            "model": model_name,
-                            "seed": seed,
-                            "temperature": temperature,
-                            "first_question_id": fq["id"],
-                            "first_question": turn.messages[0]["content"],
-                            "first_response": turn.first_response,
-                            "follow_up_question_id": fu["id"],
-                            "follow_up_question": fu["template"],
-                            "follow_up_response": follow_up_response,
-                        }
-                    )
-
                 out_path = out_dir / output_filename(model_name, fq["id"], fu["id"], len(first_questions))
-                pd.DataFrame.from_records(records).to_csv(out_path, index=False)
-                print(f"[{model_name}] wrote {out_path}")
+                f = open(out_path, "w", newline="", encoding="utf-8")
+                writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
+                writer.writeheader()
+                files[(fq["id"], fu["id"])] = f
+                writers[(fq["id"], fu["id"])] = writer
+
+        for iteration, seed in enumerate(seeds, start=1):
+            print(f"[{model_name}] iteration {iteration}/{len(seeds)} (seed={seed})")
+            set_seed(seed)
+
+            for fq in first_questions:
+                print(f"[{model_name}] first question '{fq['id']}': generating first-turn replies "
+                      f"for {len(posts)} posts ...")
+                first_turns: list[Turn] = []
+                for row in posts.itertuples(index=False):
+                    user_msg = fq["template"].format(post_text=row.post_text)
+                    messages = [{"role": "user", "content": user_msg}]
+                    first_response = generate_reply(model, tokenizer, messages, gen_kwargs)
+                    first_turns.append(Turn(row.post_id, row.post_text, messages, first_response))
+
+                for fu in follow_up_questions:
+                    print(f"[{model_name}] follow-up '{fu['id']}': generating replies ...")
+                    writer = writers[(fq["id"], fu["id"])]
+                    for turn in first_turns:
+                        conversation = turn.messages + [
+                            {"role": "assistant", "content": turn.first_response},
+                            {"role": "user", "content": fu["template"]},
+                        ]
+                        follow_up_response = generate_reply(model, tokenizer, conversation, gen_kwargs)
+                        writer.writerow(
+                            {
+                                "post_id": turn.post_id,
+                                "post_text": turn.post_text,
+                                "model": model_name,
+                                "iteration": iteration,
+                                "seed": seed,
+                                "temperature": temperature,
+                                "first_question_id": fq["id"],
+                                "first_question": turn.messages[0]["content"],
+                                "first_response": turn.first_response,
+                                "follow_up_question_id": fu["id"],
+                                "follow_up_question": fu["template"],
+                                "follow_up_response": follow_up_response,
+                            }
+                        )
+                    files[(fq["id"], fu["id"])].flush()
+
+        for (fq_id, fu_id), f in files.items():
+            f.close()
+            print(f"[{model_name}] wrote {f.name}")
 
         del model, tokenizer
         gc.collect()

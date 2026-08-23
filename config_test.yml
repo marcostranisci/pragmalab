@@ -1,0 +1,40 @@
+# Quick smoke-test configuration: a single small (0.5B) model with several
+# iterations/seeds, meant for fast local sanity checks before launching a
+# full run on the HPC with config.yml. Use with src/test_small_model.py.
+
+run:
+  seed: 1
+  n_iterations: 3
+  seeds: [1, 2, 3]
+  temperature: 0.7
+  top_p: 0.95
+  max_new_tokens: 64
+  do_sample: true
+  # Keep this small so the smoke test runs in seconds.
+  limit: 2
+
+input:
+  csv_path: "data/example_posts.csv"
+  post_id_column: "post_id"
+  post_text_column: "text"
+
+output:
+  dir: "outputs/test_small_model"
+
+models:
+  - name: qwen2_5_0_5b
+    hf_repo_id: "Qwen/Qwen2.5-0.5B-Instruct"
+    dtype: bfloat16
+    device_map: auto
+    trust_remote_code: false
+
+first_questions:
+  - id: would_you_moderate
+    template: >-
+      I saw this post: "{post_text}"
+
+      Would you moderate it?
+
+follow_up_questions:
+  - id: are_you_sure
+    template: "Are you sure?"
