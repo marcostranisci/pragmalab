@@ -33,22 +33,22 @@ output:
 # AutoModelForCausalLM / AutoTokenizer. Add or remove models freely.
 models:
   - name: ministral
-    hf_repo_id: "mistralai/Ministral-8B-Instruct-2410"
+    hf_repo_id: "Qwen/Qwen2.5-0.5B-Instruct"
     dtype: bfloat16
     device_map: auto
     trust_remote_code: false
 
-  - name: llama3_8b
-    hf_repo_id: "meta-llama/Llama-3.1-8B-Instruct"
-    dtype: bfloat16
-    device_map: auto
-    trust_remote_code: false
+  #- name: llama3_8b
+  #  hf_repo_id: "meta-llama/Llama-3.1-8B-Instruct"
+   # dtype: bfloat16
+    #device_map: auto
+   # trust_remote_code: false
 
-  - name: qwen2_5_7b
-    hf_repo_id: "Qwen/Qwen2.5-7B-Instruct"
-    dtype: bfloat16
-    device_map: auto
-    trust_remote_code: false
+  #- name: qwen2_5_7b
+   # hf_repo_id: "Qwen/Qwen2.5-7B-Instruct"
+  #  dtype: bfloat16
+  #  device_map: auto
+  #  trust_remote_code: false
 
 # First turn of the conversation. {post_text} is substituted with the row's post.
 # Add more entries to try several phrasings for the opening question.
