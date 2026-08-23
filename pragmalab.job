@@ -7,6 +7,7 @@
 #SBATCH --time=48:00:00 # Run time (hh:mm:ss)
 #SBATCH --partition=acltr
 
+module load Anaconda3
 conda activate pragmalab
 
 python src/generate_conversations.py --config config.yml
