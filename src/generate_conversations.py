@@ -24,6 +24,7 @@ from typing import Any
 import pandas as pd
 import torch
 import yaml
+from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
 FIELDNAMES = [
@@ -181,19 +182,26 @@ def run(cfg: dict) -> None:
             set_seed(seed)
 
             for fq in first_questions:
-                print(f"[{model_name}] first question '{fq['id']}': generating first-turn replies "
-                      f"for {len(posts)} posts ...")
                 first_turns: list[Turn] = []
-                for row in posts.itertuples(index=False):
+                first_turn_bar = tqdm(
+                    posts.itertuples(index=False),
+                    total=len(posts),
+                    desc=f"[{model_name}] iter {iteration}/{len(seeds)} | {fq['id']}",
+                )
+                for row in first_turn_bar:
                     user_msg = fq["template"].format(post_text=row.post_text)
                     messages = [{"role": "user", "content": user_msg}]
                     first_response = generate_reply(model, tokenizer, messages, gen_kwargs)
                     first_turns.append(Turn(row.post_id, row.post_text, messages, first_response))
 
                 for fu in follow_up_questions:
-                    print(f"[{model_name}] follow-up '{fu['id']}': generating replies ...")
                     writer = writers[(fq["id"], fu["id"])]
-                    for turn in first_turns:
+                    out_file = files[(fq["id"], fu["id"])]
+                    follow_up_bar = tqdm(
+                        first_turns,
+                        desc=f"[{model_name}] iter {iteration}/{len(seeds)} | {fq['id']} -> {fu['id']}",
+                    )
+                    for turn in follow_up_bar:
                         conversation = turn.messages + [
                             {"role": "assistant", "content": turn.first_response},
                             {"role": "user", "content": fu["template"]},
@@ -215,7 +223,7 @@ def run(cfg: dict) -> None:
                                 "follow_up_response": follow_up_response,
                             }
                         )
-                    files[(fq["id"], fu["id"])].flush()
+                        out_file.flush()
 
         for (fq_id, fu_id), f in files.items():
             f.close()
