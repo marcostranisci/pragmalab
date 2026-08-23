@@ -2,7 +2,16 @@
 # Edit the paths, models and prompt wording below; nothing is hardcoded in the script.
 
 run:
+  # Base seed, used when neither `seeds` nor `n_iterations` below is set.
   seed: 42
+  # How many times to repeat generation for each (model, follow_up_question, post),
+  # each with its own seed, e.g. to sample multiple generations per item.
+  # If set without `seeds`, seeds are derived as [seed, seed+1, ..., seed+n_iterations-1].
+  n_iterations: 1
+  # Explicit list of seeds, one per iteration. If set, its length must match
+  # n_iterations (or n_iterations can be omitted and is inferred from this list).
+  # Example: seeds: [42, 43, 44]
+  seeds: null
   temperature: 0.7
   top_p: 0.95
   max_new_tokens: 256
