@@ -16,7 +16,7 @@ pair — see `run.n_iterations` / `run.seeds` below.
 
 ```bash
 conda env create -f environment.yml
-conda activate modconv
+conda activate pragmalab
 
 # Install PyTorch matching your cluster's CUDA toolkit, e.g.:
 pip install torch --index-url https://download.pytorch.org/whl/cu121
@@ -60,6 +60,18 @@ Edit `config.yml`:
 
 ```bash
 python src/generate_conversations.py --config config.yml
+```
+
+On a SLURM cluster, submit `run.job` instead: it creates the `pragmalab`
+conda env from `environment.yml` if it doesn't already exist at
+`/home/marcos/.conda/envs/pragmalab`, installs PyTorch + `requirements.txt`,
+points the Hugging Face Hub cache (`HF_HOME`/`HF_HUB_CACHE`) at
+`/scratch/$USER/hf_cache` (adjust the paths to your cluster) so downloaded
+model repos survive across jobs instead of filling your home quota, then
+runs the generator:
+
+```bash
+sbatch run.job
 ```
 
 Output CSVs land in `outputs/` (configurable via `output.dir`), one per

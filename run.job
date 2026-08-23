@@ -1,0 +1,46 @@
+#!/bin/bash
+#SBATCH --job-name=pragmalab # Job name
+#SBATCH --nodes=1
+#SBATCH --nodelist=cn19
+#SBATCH --cpus-per-task=8 # Schedule one core
+#SBATCH --gres=gpu
+#SBATCH --time=48:00:00 # Run time (hh:mm:ss)
+#SBATCH --partition=acltr
+
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_NAME="pragmalab"
+ENV_PREFIX="/home/marcos/.conda/envs/${ENV_NAME}"
+
+# PyTorch wheel matching your cluster's CUDA toolkit (see README.md); adjust
+# cu121 if a different CUDA build is needed.
+TORCH_INDEX_URL="https://download.pytorch.org/whl/cu121"
+
+# Hugging Face Hub cache: point it at scratch space instead of $HOME so
+# downloaded model repos (config.yml's hf_repo_id) don't fill up your home
+# quota and are reused across job runs instead of re-downloaded each time.
+export HF_HOME="/scratch/${USER}/hf_cache"
+export HF_HUB_CACHE="${HF_HOME}/hub"
+export TRANSFORMERS_CACHE="${HF_HOME}/hub" # legacy var, some libs still read it
+mkdir -p "${HF_HUB_CACHE}"
+
+# --- Create/refresh the conda env, then install dependencies -------------
+source "$(conda info --base)/etc/profile.d/conda.sh"
+
+if [ ! -d "${ENV_PREFIX}" ]; then
+    echo "Creating conda env '${ENV_NAME}' at ${ENV_PREFIX} ..."
+    conda env create -p "${ENV_PREFIX}" -f "${REPO_DIR}/environment.yml"
+fi
+
+conda activate "${ENV_PREFIX}"
+
+python -c "import torch" 2>/dev/null || pip install torch --index-url "${TORCH_INDEX_URL}"
+pip install -r "${REPO_DIR}/requirements.txt"
+
+# If pulling gated models (e.g. Llama), authenticate once beforehand, e.g.
+# by running `huggingface-cli login` interactively or exporting HF_TOKEN.
+
+# --- Run -------------------------------------------------------------------
+cd "${REPO_DIR}"
+/home/marcos/.conda/envs/pragmalab/bin/python src/generate_conversations.py --config config.yml
