@@ -27,6 +27,10 @@ input:
   post_text_column: "text"
 
 output:
+  # Where generate_first_replies.py writes its per-model first-turn CSVs, and
+  # where generate_follow_up_replies.py reads them back from.
+  first_replies_dir: "output/first_replies"
+  # Where generate_follow_up_replies.py writes its final per-(model, follow-up) CSVs.
   dir: "outputs"
 
 # Every entry is loaded straight from Hugging Face Hub (or a local path) with

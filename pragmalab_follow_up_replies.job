@@ -1,0 +1,13 @@
+#!/bin/bash
+#SBATCH --job-name=pragmalab_followup # Job name
+#SBATCH --nodes=1
+#SBATCH --nodelist=cn19
+#SBATCH --cpus-per-task=8 # Schedule one core
+#SBATCH --gres=gpu
+#SBATCH --time=48:00:00 # Run time (hh:mm:ss)
+#SBATCH --partition=acltr
+
+module load Anaconda3
+conda activate pragmalab
+
+python src/generate_follow_up_replies.py --config config.yml
