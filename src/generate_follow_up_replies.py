@@ -2,10 +2,15 @@
 
 This is stage 2 of the two-stage pipeline: for every model it reads back the
 first-turn replies written by `generate_first_replies.py` (from
-`output.first_replies_dir`) and, for each configured follow-up question,
-sends the conversation-so-far plus the follow-up and records the model's
-reply. One output CSV is written per (model, first_question, follow_up)
-combination, matching the original single-script pipeline's output format.
+`output.first_replies_dir`), keeps only the rows whose `seed` is in
+`run.seeds`, and for each configured follow-up question sends the
+conversation-so-far plus the follow-up and records the model's reply. One
+output CSV is written per (model, first_question, follow_up) combination,
+matching the original single-script pipeline's output format.
+
+To generate follow-ups for only one seed's first replies (e.g. seed 42,
+skipping seed 85 rows in the same first-replies file), set `run.seeds: [42]`
+(and drop `run.n_iterations`, or set it to 1) in the config before running.
 
 Usage:
     python src/generate_follow_up_replies.py --config config.yml
@@ -36,6 +41,12 @@ def run(pcfg: PipelineConfig) -> None:
                 f"{first_replies_path}. Run generate_first_replies.py first."
             )
         first_replies = pd.read_csv(first_replies_path)
+        first_replies = first_replies[first_replies["seed"].isin(pcfg.seeds)]
+        if first_replies.empty:
+            raise ValueError(
+                f"No first-turn replies for '{model_name}' match run.seeds={pcfg.seeds} "
+                f"in {first_replies_path}."
+            )
 
         # Open one CSV writer per (first_question, follow_up_question) up front so
         # rows are streamed into the same output file as they're generated.
