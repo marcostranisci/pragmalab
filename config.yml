@@ -11,7 +11,7 @@ run:
   # Explicit list of seeds, one per iteration. If set, its length must match
   # n_iterations (or n_iterations can be omitted and is inferred from this list).
   # Example: seeds: [42, 43, 44]
-  seeds: [1985,2666]
+  seeds: [42,85]
   temperature: 0.7
   top_p: 0.95
   max_new_tokens: 256
@@ -22,7 +22,7 @@ run:
 input:
   csv_path: "data/data_predictions.csv"
   # Column holding a unique identifier for each post (any name is fine).
-  post_id_column: "post_id"
+  post_id_column: "_id"
   # Column holding the post text that gets dropped into the prompt templates.
   post_text_column: "text"
 
@@ -42,17 +42,17 @@ models:
     device_map: auto
     trust_remote_code: false
 
-  #- name: llama3_8b
-   # hf_repo_id: "meta-llama/Llama-3.1-8B-Instruct"
-  #  dtype: bfloat16
-  #  device_map: auto
-  #  trust_remote_code: false
+  - name: llama3_8b
+    hf_repo_id: "meta-llama/Llama-3.1-8B-Instruct"
+    dtype: bfloat16
+    device_map: auto
+    trust_remote_code: false
 
-  #- name: qwen2_5_7b
-  #  hf_repo_id: "Qwen/Qwen2.5-7B-Instruct"
-  #  dtype: bfloat16
-  #  device_map: auto
-  #  trust_remote_code: false
+  - name: qwen2_5_7b
+    hf_repo_id: "Qwen/Qwen2.5-7B-Instruct"
+    dtype: bfloat16
+    device_map: auto
+    trust_remote_code: false
 
 # First turn of the conversation. {post_text} is substituted with the row's post.
 # Add more entries to try several phrasings for the opening question.
