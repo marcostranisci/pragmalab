@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=pragmalab # Job name
-#SBATCH --nodes=1 
+#SBATCH --job-name=pragmalab_first # Job name
+#SBATCH --nodes=1
 #SBATCH --nodelist=cn19
 #SBATCH --cpus-per-task=8 # Schedule one core
 #SBATCH --gres=gpu
@@ -10,4 +10,4 @@
 module load Anaconda3
 conda activate pragmalab
 
-python src/generate_conversations.py --config config.yml
+python src/generate_first_replies.py --config config.yml

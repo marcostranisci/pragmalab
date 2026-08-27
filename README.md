@@ -6,11 +6,25 @@ Generates two-turn conversations about content moderation from a CSV of posts:
 2. Follow-up turn: "Are you sure?" (or whatever is configured)
 
 Everything — input CSV, models, generation parameters and prompt wording — is
-controlled from `config.yml`. One output CSV is written per
-`(model, follow_up_question)` combination, e.g. `ministral_are_you_sure.csv`,
-streamed out with `csv.DictWriter` as generations complete. Each post can be
-generated multiple times (different seeds) per `(model, follow_up_question)`
-pair — see `run.n_iterations` / `run.seeds` below.
+controlled from `config.yml`. Each post can be generated multiple times
+(different seeds) per `(model, follow_up_question)` pair — see
+`run.n_iterations` / `run.seeds` below.
+
+The pipeline is split into two stages, each its own script, so a long run
+across several models doesn't have to fit inside a single job's time limit:
+
+1. `src/generate_first_replies.py` generates every first-turn ("would you
+   moderate this?") reply and writes one CSV per model to
+   `output.first_replies_dir` (default `output/first_replies/`), e.g.
+   `ministral_first.csv`.
+2. `src/generate_follow_up_replies.py` reads those CSVs back in and, for
+   each configured follow-up question, generates the second-turn reply.
+   One output CSV is written per `(model, follow_up_question)` combination,
+   e.g. `ministral_are_you_sure.csv`, streamed out with `csv.DictWriter` as
+   generations complete.
+
+Both scripts share their config/data loading and model-loading code via
+`src/pipeline.py` (`PipelineConfig` and `ConversationModel`).
 
 ## Setup (HPC, conda, Python 3.12)
 
@@ -58,23 +72,40 @@ Edit `config.yml`:
 
 ## Run
 
+Run the two stages in order:
+
 ```bash
-python src/generate_conversations.py --config config.yml
+python src/generate_first_replies.py --config config.yml
+python src/generate_follow_up_replies.py --config config.yml
 ```
 
-Output CSVs land in `outputs/` (configurable via `output.dir`), one per
-`(model, follow_up_question)` pair, each containing: `post_id`, `post_text`,
-`model`, `iteration`, `seed`, `temperature`, `first_question_id`,
-`first_question`, `first_response`, `follow_up_question_id`,
-`follow_up_question`, `follow_up_response`. When `run.n_iterations` (or
-`run.seeds`) is greater than 1, the file contains one row per
-`(post, iteration)`, distinguished by the `iteration`/`seed` columns.
+On the HPC, submit them as two separate jobs so each stays well inside its
+time limit — `pragmalab_first_replies.job` and
+`pragmalab_follow_up_replies.job`. Chain them so the second only starts once
+the first succeeds:
+
+```bash
+first_id=$(sbatch --parsable pragmalab_first_replies.job)
+sbatch --dependency=afterok:$first_id pragmalab_follow_up_replies.job
+```
+
+Stage 1 writes one CSV per model to `output.first_replies_dir` (default
+`output/first_replies/`), each containing: `post_id`, `post_text`, `model`,
+`iteration`, `seed`, `temperature`, `first_question_id`, `first_question`,
+`first_response`.
+
+Stage 2 reads those back in and writes to `output.dir` (default `outputs/`),
+one CSV per `(model, follow_up_question)` pair, adding
+`follow_up_question_id`, `follow_up_question` and `follow_up_response` to
+the same columns. When `run.n_iterations` (or `run.seeds`) is greater than
+1, files contain one row per `(post, iteration)`, distinguished by the
+`iteration`/`seed` columns.
 
 ## Smoke-testing on a small model
 
-`src/test_small_model.py` runs the same pipeline against a single small
-(`Qwen2.5-0.5B-Instruct`) model, configured via `config_test.yml` with its
-own small `run.n_iterations`/`run.seeds` distinct from the main
+`src/test_small_model.py` runs both stages back to back against a single
+small (`Qwen2.5-0.5B-Instruct`) model, configured via `config_test.yml` with
+its own small `run.n_iterations`/`run.seeds` distinct from the main
 `config.yml`. Use it for a fast local sanity check before launching a full
 multi-model run on the HPC:
 

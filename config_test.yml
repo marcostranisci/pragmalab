@@ -19,6 +19,7 @@ input:
   post_text_column: "text"
 
 output:
+  first_replies_dir: "outputs/test_small_model/first_replies"
   dir: "outputs/test_small_model"
 
 models:
